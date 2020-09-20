@@ -1,0 +1,317 @@
+%\documentclass{beamer}
+% because the year is likely >2015, might want to support widescreen:
+\documentclass[aspectratio=169]{beamer}
+% (the default is 43, i.e. 4:3)
+
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+\usepackage{tikz}\usetikzlibrary{positioning}
+\usepackage{xcolor}
+
+\usepackage{listings}
+
+% Styling. Highly recommend using the metropolis theme, which has many small
+% `features' that help a lot with readability and comprehensibility.
+
+\usetheme{metropolis}
+
+% Careful with the colors!
+%\setbeamercolor{normal text}{fg=black!75,bg=black!2}
+%\setbeamercolor{alerted text}{fg=green!80!black}
+%\setbeamercolor{palette primary}{fg=red!10,bg=violet!50!black}
+%\setbeamercolor{palette primary}{bg=red!40!black}
+%\setbeamercolor{palette primary}{bg=green!50!yellow!80!black}
+
+\usepackage{FiraSans}
+% some other font packages:
+%\usepackage[defaultsans]{droidsans}
+%\usepackage[sfdefault]{cabin}
+%\usepackage[math]{iwona}
+%\usepackage[sfdefault,light]{roboto}
+
+% colored underline, with Beamer overlay support                                                                                                                                                                                                                                                                                                                                                                                         
+% usage: \cul{x} or \cul[blue]{x} or \cul<2->{x} or \cul<2->[blue]{x}                                                                                                                                                                                                                                                                                                                                                                    
+\newcommand<>{\cul}[2][red]{%
+  % change underline dimentions: https://tex.stackexchange.com/a/167957/25264
+  \fontdimen8\textfont3=0.75pt%
+  % colored underline: https://tex.stackexchange.com/a/9477/25264
+  % transparent underline: https://tex.stackexchange.com/a/45601/25264
+  % switch between colored and transparent: http://mirrors.ibiblio.org/CTAN/macros/latex/contrib/beamer/doc/beameruserguide.pdf sections 9.3 and 9.6.1
+  \alt#3%
+      {\color{#1}\underline{{\color{black}#2}}\color{black}}%
+      {\transparent{0.0}\underline{{\transparent{1.0}#2}}\transparent{1.0}}%
+}
+
+\author{Jiří Klepl}
+\title{Type Inference and Polymorphism for C} %really change this!
+\date{September 2020} %change this too
+% better alternative:
+%\date{MFF UK, September 2020}
+% also possible:
+%\date{}
+
+\begin{document}
+\maketitle
+
+% Start with roughly 3 slides that work as an `abstract'. Give a totally brief
+% overview of what is the motivation for the thesis, how you approached it, and
+% what is the main result.
+%
+% The point of this is that your problem, approach and results, if coherent,
+% will deliver a message to the commitee that your thesis MAKES SENSE. The
+% sooner they know, the better.
+%
+% I follow with a demonstration that shows how I would present and defend why I
+% developed this `template' slideshow.
+
+\begin{frame}{The C Language}
+\begin{itemize}
+\item[\textcolor{green}{\textbullet}] Valued for its simplicity and code transparency
+\item[\textcolor{green}{\textbullet}] One of the most influential languages in systems
+development
+\item[\textcolor{green}{\textbullet}] The language of kernel development
+\end{itemize}
+
+\begin{itemize}
+\item[\textcolor{red}{\textbullet}] No support for polymorphism
+\item[\textcolor{red}{\textbullet}] Generic constructions must be simulated (macros, void*)
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}[fragile, t]{Generic Programming in C (example from BSD: queue.h)}
+
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black},escapeinside={\%*}{*)}]
+SLIST_HEAD(%*\alert<2>{slisthead}*), entry) head = SLIST_HEAD_INITIALIZER(head);
+
+struct entry {
+ ...
+ SLIST_ENTRY(entry) entries; /* Singly-linked List. */
+ ...
+} *n1;
+
+n1 = malloc(%*\alert<2>{sizeof(struct entry)}*));
+SLIST_INSERT_HEAD(&head, n1, %*\alert<2>{entries}*)); /* Insert at the head. */
+\end{lstlisting}
+
+\uncover<2>{\alert{We have to provide type-relevant information (this could be inferred).}}
+\end{frame}
+
+\begin{frame}[fragile]{Example from BSD: queue.h}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+SLIST_HEAD(int_slist, int_entry) head = SLIST_HEAD_INITIALIZER(head);
+
+struct int_entry {
+    SLIST_ENTRY(int_entry) entries;
+    int value;
+} n1;
+
+n1 = malloc(sizeof(struct int_entry));
+n1->value = 1;
+SLIST_INSERT_HEAD(&head, n1, entries); 
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Our approach}
+\begin{itemize}
+    \item Minimal language extension
+    \item Hindley-Milner-style polymorphism and inference
+    \item Type classes for overloading
+\end{itemize}
+
+\pause
+
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+a head = empty(); // the type is inferred
+insert_head(&head, (int)1);
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile, t]{Polymorphic list implementation}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+<a : b ~ struct list : <a> > // type variables and derived types
+struct list {
+    b *next;
+    a value;
+};
+
+<a : b ~ struct list : <a> >
+void insert_head(b **head, a value) {
+    b *node = new(); // required type for new() is inferred
+    node->next = *head;
+    node->value = value;
+    *head = node;
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{Simple helper functions}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+<a, b : c ~ b : <a> >
+c *empty() { 
+    return (c *)NULL; 
+}
+
+<a>
+a *new() {
+    return (a *)malloc(sizeof(a));
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}{Results}
+\begin{itemize}
+\item Proof-of-concept compiler to C
+\item Functionality partially overlaps with C++ templates
+\item Practical programs that work with CHM
+\item Identified future challenges:
+\begin{itemize}
+    \item implicit conversions (subtyping, constantness, ...)
+    \item type of \texttt{struct} accessors
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Example output}
+Compiler output: normal C code, can be compiled with \texttt{gcc}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\tiny,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+typedef struct TA7TC4list3int TA7TC4list3int;
+struct TA7TC4list3int {  TA7TC4list3int * next; int value;  };
+
+TA7TC4list3int * __new_TF018TP14TA7TC4list3int()
+{  return (TA7TC4list3int *) malloc(sizeof(TA7TC4list3int));  }
+
+void __insert_head_TF25TP18TP14TA7TC4list3intint7TC4Void(TA7TC4list3int * * head,
+                                                         int value)
+{   TA7TC4list3int * node = __new_TF018TP14TA7TC4list3int();
+    node->next = *head;
+    node->value = value;
+    *head = node;  }
+
+TA7TC4list3int * __nullptr_TF018TP14TA7TC4list3int()
+{ return (TA7TC4list3int *) (void *) 0; }
+
+TP14TA7TC4list3int head = __nullptr_TF018TP14TA7TC4list3int();
+__insert_head_TF25TP18TP14TA7TC4list3intint7TC4Void(&head, (int) 1);
+\end{lstlisting}
+\end{frame}
+
+\section{How does the CHM compiler work?}
+
+\begin{frame}{Implementation overview}
+\begin{itemize}
+    \item Parsing (uses modified Language.C)
+    \item Conversion to $\lambda_C$
+    \item Type Inference (uses modified THIH)
+    \item Monomorphization
+    \begin{itemize}
+        \item Instantiation
+        \item Mangling (`TP', `TF', structs, primitive types)
+    \end{itemize}
+    \item Code output
+    \item Compiling (uses gcc)
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Representing C types using $\lambda_C$ conversion}
+\begin{itemize}
+\item Primitive types and structs (unions) modeled directly:
+\begin{itemize}
+    \item $[[t]]_{\lambda_c} = \alert<2>{t}$
+\end{itemize}
+\item Pointers and functions:
+\begin{itemize}
+    \item $[[t\ *]]_{\lambda_c} = \alert<2>{(*)}\ [[t]]_{\lambda_c}$
+    \item $[[t(p_1, \dots p_n)]]_{\lambda_c} = \alert<2>{(}[[p_1]]_{\lambda_c}\alert<2>{,} \dots\alert<2>{,} [[p_n]]_{\lambda_c}\alert<2>{)} \alert<2>{\to} [[t]]_{\lambda_c}$
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Representing type dependencies inside C constructs using $\lambda_C$ conversion}
+\begin{itemize}
+\item An example for C addition (functions and initializations more complex)
+\begin{itemize}
+    \item $[[a + b]]_{\lambda_c} = (+)\ [[a]]_{\lambda_c}\ [[b]]_{\lambda_c}$
+    \item $(+) : \forall \alpha . Num(\alpha) \Rightarrow \alpha \to \alpha \to \alpha$
+\end{itemize}
+\item Challenges
+\begin{itemize}
+    \item No implicit casts (we can use explicit casts)
+    \item Const semantics with the C syntax do not fit type inference rules
+    \item C dot operator with a given field syntactically equivalent to a function
+    \begin{itemize}
+        \item To preserve syntax we have to make limitations on field types
+    \end{itemize}
+\end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Extending the language (polymorphic functions and structures)}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+<a>
+a copy(a value) { return value; }
+
+<a>
+struct container { a value; };
+
+<a : b ~ container : <a> >
+b wrap(a value) {
+    b wrapper;
+    wrapper.value = value;
+    return wrapper;
+}
+\end{lstlisting}
+\end{frame}
+
+\begin{frame}[fragile]{User-defined type classes and instances}
+\begin{columns}[t]
+
+\begin{column}{0.5\textwidth}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+<a : Div<a> >
+class SafeDiv<a> { 
+a safe_div(a left, 
+           a right);
+}
+
+instance SafeDiv<float> {
+float safe_div(float left,
+               float right) {
+    return left / right;
+}
+}
+\end{lstlisting}
+\end{column}
+
+\hspace{-40pt}
+\vrule
+\hspace{5pt}
+
+\begin{column}{0.5\textwidth}
+\begin{lstlisting}[language=C,showstringspaces=false,basicstyle=\tt\small,commentstyle=\color{green!50!black},keywordstyle=\bfseries\color{blue!50!black},stringstyle=\color{red!50!black}]
+instance SafeDiv<int> { 
+int safe_div(int left,
+             int right) { 
+    if (right != 0)
+        return left / right; 
+    else return 0;
+}
+}
+\end{lstlisting}
+\end{column}
+
+\end{columns}
+\end{frame}
+
+% Ending frame is important -- in the rare case that you actually manage to
+% finish the presentation on time, it avoids the embarassing seconds of silence
+% between the time when you finish and the moment when committee detects that
+% something is wrong and they should continue.
+\begin{frame}[plain]
+\centering
+{\Large\bfseries Thank you for attention!}
+\end{frame}
+\end{document}
